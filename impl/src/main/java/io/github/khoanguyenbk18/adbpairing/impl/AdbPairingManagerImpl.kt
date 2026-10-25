@@ -1,28 +1,28 @@
-package com.devindie.zola.adb.pairing.impl
+package io.github.khoanguyenbk18.adbpairing.impl
 
 import android.content.Context
-import android.content.SharedPreferences
-import android.os.Build
-import android.util.Log
-import com.devindie.zola.adb.pairing.api.AdbConnectionEndpoint
-import com.devindie.zola.adb.pairing.api.AdbPairingConfig
-import com.devindie.zola.adb.pairing.api.AdbPairingEvent
-import com.devindie.zola.adb.pairing.api.AdbPairingFailure
-import com.devindie.zola.adb.pairing.api.AdbPairingManager
-import com.devindie.zola.adb.pairing.api.AdbPairingRequest
-import com.devindie.zola.adb.pairing.api.AdbPairingResult
-import com.devindie.zola.adb.pairing.impl.crypto.AdbKey
-import com.devindie.zola.adb.pairing.impl.crypto.AdbKeyProvider
-import com.devindie.zola.adb.pairing.impl.crypto.PreferenceAdbKeyProvider
-import com.devindie.zola.adb.pairing.impl.nsd.AdbNsdDiscovery
-import com.devindie.zola.adb.pairing.impl.nsd.AndroidAdbNsdDiscovery
-import com.devindie.zola.adb.pairing.impl.nsd.DiscoveredService
-import com.devindie.zola.adb.pairing.impl.pairing.AdbInvalidPairingCodeException
-import com.devindie.zola.adb.pairing.impl.pairing.AdbPairingEngine
-import com.devindie.zola.adb.pairing.impl.pairing.DefaultAdbPairingEngine
+import io.github.khoanguyenbk18.adbpairing.api.AdbConnectionEndpoint
+import io.github.khoanguyenbk18.adbpairing.api.AdbDiscoveryEvent
+import io.github.khoanguyenbk18.adbpairing.api.AdbDiscoveryOptions
+import io.github.khoanguyenbk18.adbpairing.api.AdbIdentity
+import io.github.khoanguyenbk18.adbpairing.api.AdbLogger
+import io.github.khoanguyenbk18.adbpairing.api.AdbPairingEvent
+import io.github.khoanguyenbk18.adbpairing.api.AdbPairingFailure
+import io.github.khoanguyenbk18.adbpairing.api.AdbPairingManager
+import io.github.khoanguyenbk18.adbpairing.api.AdbPairingRequest
+import io.github.khoanguyenbk18.adbpairing.api.log
+import io.github.khoanguyenbk18.adbpairing.impl.crypto.AdbKey
+import io.github.khoanguyenbk18.adbpairing.impl.crypto.AdbKeyProvider
+import io.github.khoanguyenbk18.adbpairing.impl.crypto.DefaultAdbKeyProvider
+import io.github.khoanguyenbk18.adbpairing.impl.crypto.PreferenceAdbKeyStore
+import io.github.khoanguyenbk18.adbpairing.impl.nsd.AdbNsdDiscovery
+import io.github.khoanguyenbk18.adbpairing.impl.nsd.AndroidAdbNsdDiscovery
+import io.github.khoanguyenbk18.adbpairing.impl.pairing.AdbInvalidPairingCodeException
+import io.github.khoanguyenbk18.adbpairing.impl.pairing.AdbPairingEngine
+import io.github.khoanguyenbk18.adbpairing.impl.pairing.DefaultAdbPairingEngine
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
@@ -32,49 +32,27 @@ import java.net.ConnectException
 
 private const val TAG = "AdbPairingManager"
 
-class AdbPairingManagerImpl internal constructor(
+internal class AdbPairingManagerImpl internal constructor(
     private val keyProvider: AdbKeyProvider,
     private val nsdDiscovery: AdbNsdDiscovery,
-    private val pairingEngine: AdbPairingEngine = DefaultAdbPairingEngine(),
-    private val currentApiLevel: Int = Build.VERSION.SDK_INT
+    private val pairingEngine: AdbPairingEngine,
+    private val options: AdbPairingOptions
 ) : AdbPairingManager {
 
-    constructor(context: Context) : this(
-        context = context,
-        preferences = context.getSharedPreferences("adb_pairing", Context.MODE_PRIVATE)
+    constructor(context: Context, options: AdbPairingOptions) : this(
+        keyProvider = DefaultAdbKeyProvider(
+            PreferenceAdbKeyStore(context.getSharedPreferences("adb_pairing", Context.MODE_PRIVATE))
+        ),
+        nsdDiscovery = AndroidAdbNsdDiscovery(context, options.logger),
+        pairingEngine = DefaultAdbPairingEngine(options.logger),
+        options = options
     )
 
-    constructor(context: Context, preferences: SharedPreferences) : this(
-        keyProvider = PreferenceAdbKeyProvider(preferences),
-        nsdDiscovery = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            AndroidAdbNsdDiscovery(context)
-        } else {
-            object : AdbNsdDiscovery {
-                override fun discover(
-                    serviceType: String,
-                    serviceNameFilter: String?
-                ): Flow<DiscoveredService> = emptyFlow()
-            }
-        },
-        pairingEngine = DefaultAdbPairingEngine(),
-        currentApiLevel = Build.VERSION.SDK_INT
-    )
+    override suspend fun getIdentity(): AdbIdentity =
+        keyProvider.getOrCreateKey(options.identityAlias)
 
     override fun pair(request: AdbPairingRequest): Flow<AdbPairingEvent> = flow {
-        Log.d(TAG, "Starting pairing flow for request=$request")
-
-        if (currentApiLevel < 30) {
-            Log.w(TAG, "Unsupported Android version: $currentApiLevel (requires 30+)")
-            emit(
-                AdbPairingEvent.Failed(
-                    AdbPairingFailure.UnsupportedPlatformVersion(
-                        currentApi = currentApiLevel,
-                        minRequiredApi = 30
-                    )
-                )
-            )
-            return@flow
-        }
+        options.logger.log(AdbLogger.DEBUG, TAG, "Starting pairing flow for request=$request")
 
         // Step 1: Pairing Port Resolution
         val pairingPort: Int
@@ -85,26 +63,29 @@ class AdbPairingManagerImpl internal constructor(
                     pairingPort = directPort
                     emit(
                         AdbPairingEvent.PairingServiceFound(
-                            host = request.config.host,
+                            host = "127.0.0.1",
                             port = pairingPort
                         )
                     )
                 } else {
                     emit(AdbPairingEvent.SearchingForPairingService)
                     val discovered = try {
-                        withTimeout(request.config.discoveryTimeoutMs) {
+                        withTimeout(options.discoveryTimeoutMs) {
                             nsdDiscovery.discover(AdbNsdDiscovery.TLS_PAIRING).first()
                         }
-                    } catch (_: TimeoutCancellationException) {
-                        emit(
-                            AdbPairingEvent.Failed(
-                                AdbPairingFailure.Timeout(
-                                    phase = AdbPairingFailure.Timeout.Phase.PAIRING_DISCOVERY,
-                                    timeoutMs = request.config.discoveryTimeoutMs
+                    } catch (e: CancellationException) {
+                        if (e is TimeoutCancellationException) {
+                            emit(
+                                AdbPairingEvent.Failed(
+                                    AdbPairingFailure.Timeout(
+                                        phase = AdbPairingFailure.Timeout.Phase.PAIRING_DISCOVERY,
+                                        timeoutMs = options.discoveryTimeoutMs
+                                    )
                                 )
                             )
-                        )
-                        return@flow
+                            return@flow
+                        }
+                        throw e
                     } catch (e: Exception) {
                         emit(
                             AdbPairingEvent.Failed(
@@ -120,7 +101,7 @@ class AdbPairingManagerImpl internal constructor(
                     pairingPort = discovered.port
                     emit(
                         AdbPairingEvent.PairingServiceFound(
-                            host = request.config.host,
+                            host = "127.0.0.1",
                             port = pairingPort,
                             serviceName = discovered.serviceName
                         )
@@ -131,22 +112,25 @@ class AdbPairingManagerImpl internal constructor(
             is AdbPairingRequest.Qr -> {
                 emit(AdbPairingEvent.SearchingForPairingService)
                 val discovered = try {
-                    withTimeout(request.config.discoveryTimeoutMs) {
+                    withTimeout(options.discoveryTimeoutMs) {
                         nsdDiscovery.discover(
                             serviceType = AdbNsdDiscovery.TLS_PAIRING,
                             serviceNameFilter = request.serviceName
                         ).first()
                     }
-                } catch (_: TimeoutCancellationException) {
-                    emit(
-                        AdbPairingEvent.Failed(
-                            AdbPairingFailure.Timeout(
-                                phase = AdbPairingFailure.Timeout.Phase.PAIRING_DISCOVERY,
-                                timeoutMs = request.config.discoveryTimeoutMs
+                } catch (e: CancellationException) {
+                    if (e is TimeoutCancellationException) {
+                        emit(
+                            AdbPairingEvent.Failed(
+                                AdbPairingFailure.Timeout(
+                                    phase = AdbPairingFailure.Timeout.Phase.PAIRING_DISCOVERY,
+                                    timeoutMs = options.discoveryTimeoutMs
+                                )
                             )
                         )
-                    )
-                    return@flow
+                        return@flow
+                    }
+                    throw e
                 } catch (e: Exception) {
                     emit(
                         AdbPairingEvent.Failed(
@@ -162,7 +146,7 @@ class AdbPairingManagerImpl internal constructor(
                 pairingPort = discovered.port
                 emit(
                     AdbPairingEvent.PairingServiceFound(
-                        host = request.config.host,
+                        host = "127.0.0.1",
                         port = pairingPort,
                         serviceName = discovered.serviceName
                     )
@@ -174,9 +158,11 @@ class AdbPairingManagerImpl internal constructor(
         emit(AdbPairingEvent.PairingInProgress)
 
         val key: AdbKey = try {
-            keyProvider.getOrCreateKey(request.config.keyAlias)
-        } catch (e: Throwable) {
-            Log.e(TAG, "Key retrieval failed: ${e.message}", e)
+            keyProvider.getOrCreateKey(options.identityAlias)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            options.logger.log(AdbLogger.ERROR, TAG, "Key retrieval failed: ${e.message}", e)
             emit(
                 AdbPairingEvent.Failed(
                     AdbPairingFailure.KeyStoreError(message = e.message, cause = e)
@@ -191,24 +177,27 @@ class AdbPairingManagerImpl internal constructor(
         }
 
         val handshakeSuccess = try {
-            withTimeout(request.config.pairingTimeoutMs) {
+            withTimeout(options.pairingTimeoutMs) {
                 pairingEngine.pair(
-                    host = request.config.host,
                     port = pairingPort,
                     code = secret,
-                    key = key
+                    key = key,
+                    timeoutMs = options.pairingTimeoutMs
                 )
             }
-        } catch (_: TimeoutCancellationException) {
-            emit(
-                AdbPairingEvent.Failed(
-                    AdbPairingFailure.Timeout(
-                        phase = AdbPairingFailure.Timeout.Phase.PAIRING_HANDSHAKE,
-                        timeoutMs = request.config.pairingTimeoutMs
+        } catch (e: CancellationException) {
+            if (e is TimeoutCancellationException) {
+                emit(
+                    AdbPairingEvent.Failed(
+                        AdbPairingFailure.Timeout(
+                            phase = AdbPairingFailure.Timeout.Phase.PAIRING_HANDSHAKE,
+                            timeoutMs = options.pairingTimeoutMs
+                        )
                     )
                 )
-            )
-            return@flow
+                return@flow
+            }
+            throw e
         } catch (_: AdbInvalidPairingCodeException) {
             emit(AdbPairingEvent.Failed(AdbPairingFailure.InvalidPairingCode))
             return@flow
@@ -248,19 +237,22 @@ class AdbPairingManagerImpl internal constructor(
         emit(AdbPairingEvent.SearchingForConnectionService)
 
         val connectService = try {
-            withTimeout(request.config.connectDiscoveryTimeoutMs) {
+            withTimeout(options.connectDiscoveryTimeoutMs) {
                 nsdDiscovery.discover(serviceType = AdbNsdDiscovery.TLS_CONNECT).first()
             }
-        } catch (_: TimeoutCancellationException) {
-            emit(
-                AdbPairingEvent.Failed(
-                    AdbPairingFailure.Timeout(
-                        phase = AdbPairingFailure.Timeout.Phase.CONNECT_DISCOVERY,
-                        timeoutMs = request.config.connectDiscoveryTimeoutMs
+        } catch (e: CancellationException) {
+            if (e is TimeoutCancellationException) {
+                emit(
+                    AdbPairingEvent.Failed(
+                        AdbPairingFailure.Timeout(
+                            phase = AdbPairingFailure.Timeout.Phase.CONNECT_DISCOVERY,
+                            timeoutMs = options.connectDiscoveryTimeoutMs
+                        )
                     )
                 )
-            )
-            return@flow
+                return@flow
+            }
+            throw e
         } catch (e: Exception) {
             emit(
                 AdbPairingEvent.Failed(
@@ -275,12 +267,34 @@ class AdbPairingManagerImpl internal constructor(
         }
 
         val endpoint = AdbConnectionEndpoint(
-            host = request.config.host,
+            host = "127.0.0.1",
             port = connectService.port
         )
-        emit(AdbPairingEvent.Success(AdbPairingResult(endpoint)))
+        emit(AdbPairingEvent.Success(endpoint))
     }
 
-    override fun discoverPairingPort(config: AdbPairingConfig): Flow<Int> =
-        nsdDiscovery.discover(AdbNsdDiscovery.TLS_PAIRING).map { it.port }
+    override fun discoverPairingEndpoints(options: AdbDiscoveryOptions): Flow<AdbDiscoveryEvent> = flow {
+        try {
+            nsdDiscovery.discover(
+                serviceType = AdbNsdDiscovery.TLS_PAIRING,
+                serviceNameFilter = options.serviceNameFilter
+            ).collect { service ->
+                emit(
+                    AdbDiscoveryEvent.Discovered(
+                        endpoint = AdbConnectionEndpoint(host = service.host, port = service.port),
+                        serviceName = service.serviceName
+                    )
+                )
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            emit(AdbDiscoveryEvent.Failed(reason = e.message, cause = e))
+        }
+    }
+
+    override fun discoverConnectionEndpoints(): Flow<AdbConnectionEndpoint> =
+        nsdDiscovery.discover(serviceType = AdbNsdDiscovery.TLS_CONNECT).map {
+            AdbConnectionEndpoint(host = it.host, port = it.port)
+        }
 }

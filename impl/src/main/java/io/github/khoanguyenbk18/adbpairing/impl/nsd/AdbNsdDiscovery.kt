@@ -1,11 +1,10 @@
-package com.devindie.zola.adb.pairing.impl.nsd
+package io.github.khoanguyenbk18.adbpairing.impl.nsd
 
 import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
-import android.os.Build
-import android.util.Log
-import androidx.annotation.RequiresApi
+import io.github.khoanguyenbk18.adbpairing.api.AdbLogger
+import io.github.khoanguyenbk18.adbpairing.api.log
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -14,15 +13,13 @@ import java.net.InetSocketAddress
 import java.net.NetworkInterface
 import java.net.ServerSocket
 
-private const val TAG = "AdbNsdDiscovery"
-
-data class DiscoveredService(
+internal data class DiscoveredService(
     val host: String,
     val port: Int,
     val serviceName: String
 )
 
-interface AdbNsdDiscovery {
+internal interface AdbNsdDiscovery {
     fun discover(
         serviceType: String,
         serviceNameFilter: String? = null
@@ -34,9 +31,9 @@ interface AdbNsdDiscovery {
     }
 }
 
-@RequiresApi(Build.VERSION_CODES.R)
-class AndroidAdbNsdDiscovery(
-    private val context: Context
+internal class AndroidAdbNsdDiscovery(
+    private val context: Context,
+    private val logger: AdbLogger = AdbLogger { _, _, _, _ -> }
 ) : AdbNsdDiscovery {
 
     private val nsdManager: NsdManager by lazy {
@@ -51,38 +48,37 @@ class AndroidAdbNsdDiscovery(
 
         val discoveryListener = object : NsdManager.DiscoveryListener {
             override fun onDiscoveryStarted(regType: String) {
-                Log.d(TAG, "onDiscoveryStarted: $regType")
+                logger.log(AdbLogger.DEBUG, TAG, "onDiscoveryStarted: $regType")
                 isDiscoveryActive = true
             }
 
             override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {
-                Log.w(TAG, "onStartDiscoveryFailed: $serviceType, code=$errorCode")
+                logger.log(AdbLogger.WARN, TAG, "onStartDiscoveryFailed: $serviceType, code=$errorCode")
                 isDiscoveryActive = false
                 close(IOException("NSD discovery start failed: $errorCode"))
             }
 
             override fun onDiscoveryStopped(serviceType: String) {
-                Log.d(TAG, "onDiscoveryStopped: $serviceType")
+                logger.log(AdbLogger.DEBUG, TAG, "onDiscoveryStopped: $serviceType")
                 isDiscoveryActive = false
             }
 
             override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) {
-                Log.w(TAG, "onStopDiscoveryFailed: $serviceType, code=$errorCode")
+                logger.log(AdbLogger.WARN, TAG, "onStopDiscoveryFailed: $serviceType, code=$errorCode")
                 isDiscoveryActive = false
             }
 
             override fun onServiceFound(serviceInfo: NsdServiceInfo) {
-                Log.d(TAG, "onServiceFound: ${serviceInfo.serviceName}")
+                logger.log(AdbLogger.DEBUG, TAG, "onServiceFound: ${serviceInfo.serviceName}")
                 try {
                     nsdManager.resolveService(serviceInfo, object : NsdManager.ResolveListener {
                         override fun onResolveFailed(info: NsdServiceInfo, errorCode: Int) {
-                            Log.w(TAG, "onResolveFailed: ${info.serviceName}, code=$errorCode")
+                            logger.log(AdbLogger.WARN, TAG, "onResolveFailed: ${info.serviceName}, code=$errorCode")
                         }
 
                         override fun onServiceResolved(resolved: NsdServiceInfo) {
-                            Log.d(TAG, "onServiceResolved: ${resolved.serviceName} at port ${resolved.port}")
+                            logger.log(AdbLogger.DEBUG, TAG, "onServiceResolved: ${resolved.serviceName} at port ${resolved.port}")
                             if (serviceNameFilter != null && resolved.serviceName != serviceNameFilter) {
-                                Log.d(TAG, "Skipping ${resolved.serviceName}, waiting for $serviceNameFilter")
                                 return
                             }
 
@@ -105,12 +101,12 @@ class AndroidAdbNsdDiscovery(
                         }
                     })
                 } catch (e: Exception) {
-                    Log.w(TAG, "resolveService threw: ${e.message}")
+                    logger.log(AdbLogger.WARN, TAG, "resolveService threw: ${e.message}", e)
                 }
             }
 
             override fun onServiceLost(serviceInfo: NsdServiceInfo) {
-                Log.d(TAG, "onServiceLost: ${serviceInfo.serviceName}")
+                logger.log(AdbLogger.DEBUG, TAG, "onServiceLost: ${serviceInfo.serviceName}")
             }
         }
 
@@ -125,7 +121,7 @@ class AndroidAdbNsdDiscovery(
                 try {
                     nsdManager.stopServiceDiscovery(discoveryListener)
                 } catch (e: Exception) {
-                    Log.w(TAG, "stopServiceDiscovery failed during cleanup: ${e.message}")
+                    logger.log(AdbLogger.WARN, TAG, "stopServiceDiscovery failed during cleanup: ${e.message}", e)
                 }
             }
         }
@@ -140,5 +136,9 @@ class AndroidAdbNsdDiscovery(
         } catch (_: IOException) {
             true // binding failed -> port is in use by daemon
         }
+    }
+
+    companion object {
+        private const val TAG = "AdbNsdDiscovery"
     }
 }

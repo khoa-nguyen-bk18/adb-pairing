@@ -1,16 +1,18 @@
-package com.devindie.zola.adb.pairing.impl
+package io.github.khoanguyenbk18.adbpairing.impl
 
-import com.devindie.zola.adb.pairing.api.AdbConnectionEndpoint
-import com.devindie.zola.adb.pairing.api.AdbPairingConfig
-import com.devindie.zola.adb.pairing.api.AdbPairingEvent
-import com.devindie.zola.adb.pairing.api.AdbPairingFailure
-import com.devindie.zola.adb.pairing.api.AdbPairingRequest
-import com.devindie.zola.adb.pairing.impl.crypto.AdbKey
-import com.devindie.zola.adb.pairing.impl.crypto.AdbKeyProvider
-import com.devindie.zola.adb.pairing.impl.nsd.AdbNsdDiscovery
-import com.devindie.zola.adb.pairing.impl.nsd.DiscoveredService
-import com.devindie.zola.adb.pairing.impl.pairing.AdbInvalidPairingCodeException
-import com.devindie.zola.adb.pairing.impl.pairing.AdbPairingEngine
+import io.github.khoanguyenbk18.adbpairing.api.AdbConnectionEndpoint
+import io.github.khoanguyenbk18.adbpairing.api.AdbDiscoveryEvent
+import io.github.khoanguyenbk18.adbpairing.api.AdbDiscoveryOptions
+import io.github.khoanguyenbk18.adbpairing.api.AdbLogger
+import io.github.khoanguyenbk18.adbpairing.api.AdbPairingEvent
+import io.github.khoanguyenbk18.adbpairing.api.AdbPairingFailure
+import io.github.khoanguyenbk18.adbpairing.api.AdbPairingRequest
+import io.github.khoanguyenbk18.adbpairing.impl.crypto.AdbKey
+import io.github.khoanguyenbk18.adbpairing.impl.crypto.AdbKeyProvider
+import io.github.khoanguyenbk18.adbpairing.impl.nsd.AdbNsdDiscovery
+import io.github.khoanguyenbk18.adbpairing.impl.nsd.DiscoveredService
+import io.github.khoanguyenbk18.adbpairing.impl.pairing.AdbInvalidPairingCodeException
+import io.github.khoanguyenbk18.adbpairing.impl.pairing.AdbPairingEngine
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -18,14 +20,15 @@ import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.IOException
+import java.util.concurrent.CopyOnWriteArrayList
 
 class AdbPairingManagerImplTest {
 
     private class FakeAdbKeyProvider : AdbKeyProvider {
-        override fun getOrCreateKey(name: String): AdbKey = AdbKey(name)
+        override fun getOrCreateKey(alias: String): AdbKey = AdbKey(alias)
     }
 
     private class FakeNsdDiscovery : AdbNsdDiscovery {
@@ -55,10 +58,17 @@ class AdbPairingManagerImplTest {
         var exceptionToThrow: Throwable? = null
         var delayMs: Long = 0
 
-        override suspend fun pair(host: String, port: Int, code: String, key: AdbKey): Boolean {
+        override suspend fun pair(port: Int, code: String, key: AdbKey, timeoutMs: Long): Boolean {
             if (delayMs > 0) delay(delayMs)
             exceptionToThrow?.let { throw it }
             return result
+        }
+    }
+
+    private class CapturingLogger : AdbLogger {
+        val messages = CopyOnWriteArrayList<String>()
+        override fun log(priority: Int, tag: String, message: String, throwable: Throwable?) {
+            messages.add(message)
         }
     }
 
@@ -70,7 +80,7 @@ class AdbPairingManagerImplTest {
             keyProvider = FakeAdbKeyProvider(),
             nsdDiscovery = nsd,
             pairingEngine = engine,
-            currentApiLevel = 34
+            options = AdbPairingOptions()
         )
 
         val request = AdbPairingRequest.Qr(serviceName = "studio-test", password = "secretPassword")
@@ -87,7 +97,7 @@ class AdbPairingManagerImplTest {
         assertTrue(events[3] is AdbPairingEvent.SearchingForConnectionService)
 
         val success = events[4] as AdbPairingEvent.Success
-        assertEquals(AdbConnectionEndpoint("127.0.0.1", 38765), success.result.connectionEndpoint)
+        assertEquals(AdbConnectionEndpoint("127.0.0.1", 38765), success.endpoint)
     }
 
     @Test
@@ -98,7 +108,7 @@ class AdbPairingManagerImplTest {
             keyProvider = FakeAdbKeyProvider(),
             nsdDiscovery = nsd,
             pairingEngine = engine,
-            currentApiLevel = 34
+            options = AdbPairingOptions()
         )
 
         val request = AdbPairingRequest.Manual(pairingCode = "123456", port = 42424)
@@ -112,7 +122,7 @@ class AdbPairingManagerImplTest {
         assertTrue(events[2] is AdbPairingEvent.SearchingForConnectionService)
 
         val success = events[3] as AdbPairingEvent.Success
-        assertEquals(38765, success.result.connectionEndpoint.port)
+        assertEquals(38765, success.endpoint.port)
     }
 
     @Test
@@ -125,7 +135,7 @@ class AdbPairingManagerImplTest {
             keyProvider = FakeAdbKeyProvider(),
             nsdDiscovery = nsd,
             pairingEngine = engine,
-            currentApiLevel = 34
+            options = AdbPairingOptions()
         )
 
         val request = AdbPairingRequest.Manual(pairingCode = "000000", port = 42424)
@@ -149,13 +159,12 @@ class AdbPairingManagerImplTest {
             keyProvider = FakeAdbKeyProvider(),
             nsdDiscovery = nsd,
             pairingEngine = engine,
-            currentApiLevel = 34
+            options = AdbPairingOptions(discoveryTimeoutMs = 50)
         )
 
         val request = AdbPairingRequest.Qr(
             serviceName = "studio-test",
-            password = "pass",
-            config = AdbPairingConfig(discoveryTimeoutMs = 50)
+            password = "pass"
         )
         val events = manager.pair(request).toList()
 
@@ -178,13 +187,12 @@ class AdbPairingManagerImplTest {
             keyProvider = FakeAdbKeyProvider(),
             nsdDiscovery = nsd,
             pairingEngine = engine,
-            currentApiLevel = 34
+            options = AdbPairingOptions(pairingTimeoutMs = 50)
         )
 
         val request = AdbPairingRequest.Manual(
             pairingCode = "123456",
-            port = 40000,
-            config = AdbPairingConfig(pairingTimeoutMs = 50)
+            port = 40000
         )
         val events = manager.pair(request).toList()
 
@@ -207,13 +215,12 @@ class AdbPairingManagerImplTest {
             keyProvider = FakeAdbKeyProvider(),
             nsdDiscovery = nsd,
             pairingEngine = engine,
-            currentApiLevel = 34
+            options = AdbPairingOptions(connectDiscoveryTimeoutMs = 50)
         )
 
         val request = AdbPairingRequest.Manual(
             pairingCode = "123456",
-            port = 40000,
-            config = AdbPairingConfig(connectDiscoveryTimeoutMs = 50)
+            port = 40000
         )
         val events = manager.pair(request).toList()
 
@@ -228,28 +235,7 @@ class AdbPairingManagerImplTest {
     }
 
     @Test
-    fun testUnsupportedPlatformVersion_belowAndroid11() = runTest {
-        val nsd = FakeNsdDiscovery()
-        val engine = FakePairingEngine()
-        val manager = AdbPairingManagerImpl(
-            keyProvider = FakeAdbKeyProvider(),
-            nsdDiscovery = nsd,
-            pairingEngine = engine,
-            currentApiLevel = 29 // Android 10
-        )
-
-        val request = AdbPairingRequest.Manual(pairingCode = "123456", port = 40000)
-        val events = manager.pair(request).toList()
-
-        assertEquals(1, events.size)
-        val failed = events[0] as AdbPairingEvent.Failed
-        val unsupported = failed.failure as AdbPairingFailure.UnsupportedPlatformVersion
-        assertEquals(29, unsupported.currentApi)
-        assertEquals(30, unsupported.minRequiredApi)
-    }
-
-    @Test
-    fun testColdFlow_cancellationCleansUp() = runTest {
+    fun testColdFlow_cancellationCleansUpWithoutFailureEvent() = runTest {
         val nsd = FakeNsdDiscovery().apply {
             pairingDelayMs = 5000
         }
@@ -257,16 +243,74 @@ class AdbPairingManagerImplTest {
             keyProvider = FakeAdbKeyProvider(),
             nsdDiscovery = nsd,
             pairingEngine = FakePairingEngine(),
-            currentApiLevel = 34
+            options = AdbPairingOptions()
         )
 
+        val events = mutableListOf<AdbPairingEvent>()
         val job = launch {
-            manager.pair(AdbPairingRequest.Qr("studio-test", "pass")).collect {}
+            manager.pair(AdbPairingRequest.Qr("studio-test", "pass")).collect {
+                events.add(it)
+            }
         }
         delay(50)
         job.cancel()
         delay(50)
 
         assertTrue(nsd.cancelled)
+        assertFalse(events.any { it is AdbPairingEvent.Failed })
+    }
+
+    @Test
+    fun testSecretsNeverLogged() = runTest {
+        val logger = CapturingLogger()
+        val nsd = FakeNsdDiscovery()
+        val engine = FakePairingEngine()
+        val manager = AdbPairingManagerImpl(
+            keyProvider = FakeAdbKeyProvider(),
+            nsdDiscovery = nsd,
+            pairingEngine = engine,
+            options = AdbPairingOptions(logger = logger)
+        )
+
+        val secretCode = "654321"
+        val request = AdbPairingRequest.Manual(pairingCode = secretCode, port = 42424)
+        manager.pair(request).toList()
+
+        assertTrue(logger.messages.isNotEmpty())
+        for (msg in logger.messages) {
+            assertFalse("Secret pairing code leaked in logs: $msg", msg.contains(secretCode))
+        }
+    }
+
+    @Test
+    fun testDiscoverPairingEndpoints() = runTest {
+        val nsd = FakeNsdDiscovery()
+        val manager = AdbPairingManagerImpl(
+            keyProvider = FakeAdbKeyProvider(),
+            nsdDiscovery = nsd,
+            pairingEngine = FakePairingEngine(),
+            options = AdbPairingOptions()
+        )
+
+        val events = manager.discoverPairingEndpoints(AdbDiscoveryOptions()).toList()
+        assertEquals(1, events.size)
+        val discovered = events[0] as AdbDiscoveryEvent.Discovered
+        assertEquals(41235, discovered.endpoint.port)
+        assertEquals("studio-test", discovered.serviceName)
+    }
+
+    @Test
+    fun testDiscoverConnectionEndpoints() = runTest {
+        val nsd = FakeNsdDiscovery()
+        val manager = AdbPairingManagerImpl(
+            keyProvider = FakeAdbKeyProvider(),
+            nsdDiscovery = nsd,
+            pairingEngine = FakePairingEngine(),
+            options = AdbPairingOptions()
+        )
+
+        val endpoints = manager.discoverConnectionEndpoints().toList()
+        assertEquals(1, endpoints.size)
+        assertEquals(38765, endpoints[0].port)
     }
 }

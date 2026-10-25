@@ -1,8 +1,8 @@
 # ADB Pairing API
 
-`adb-pairing:api` is the platform-neutral contract for Android wireless ADB pairing. It contains the requests, progress events, typed failures, configuration, results, and QR-session model used by pairing clients.
+`adb-pairing:api` is the platform-neutral contract for Android wireless ADB pairing. It contains the requests, progress events, typed failures, discovery events, identity abstraction, and QR-session model used by pairing clients.
 
-The module is a Kotlin/JVM library. It has no dependency on Android, Hilt, Compose, or a particular application, so UI and domain code can depend on it without seeing pairing internals.
+The module is a pure Kotlin/JVM library. It has no dependency on Android, Hilt, Compose, or any UI framework, so UI and domain code can depend on it without seeing pairing internals.
 
 ## Add the module
 
@@ -25,16 +25,23 @@ dependencies {
 
 ## Public contract
 
-The main entry point is `AdbPairingManager`:
+The main interface is `AdbPairingManager`:
 
 ```kotlin
 interface AdbPairingManager {
+    suspend fun getIdentity(): AdbIdentity
+
     fun pair(request: AdbPairingRequest): Flow<AdbPairingEvent>
-    fun discoverPairingPort(config: AdbPairingConfig = AdbPairingConfig.DEFAULT): Flow<Int>
+
+    fun discoverPairingEndpoints(
+        options: AdbDiscoveryOptions = AdbDiscoveryOptions()
+    ): Flow<AdbDiscoveryEvent>
+
+    fun discoverConnectionEndpoints(): Flow<AdbConnectionEndpoint>
 }
 ```
 
-Both functions return cold flows. Work starts when the flow is collected, and cancelling collection cancels the active discovery or pairing operation.
+All discovery and pairing functions return cold flows. Work starts when the flow is collected, and cancelling collection cancels the active discovery or pairing operation without emitting failure events.
 
 ## Manual pairing
 
@@ -48,14 +55,14 @@ val request = AdbPairingRequest.Manual(
 
 pairingManager.pair(request).collect { event ->
     when (event) {
-        is AdbPairingEvent.Success -> connect(event.result.connectionEndpoint)
+        is AdbPairingEvent.Success -> connect(event.endpoint)
         is AdbPairingEvent.Failed -> showFailure(event.failure)
         else -> showProgress(event)
     }
 }
 ```
 
-When `port` is `null`, `pair()` discovers the pairing service first. A UI that asks for the port before accepting a code can instead collect `discoverPairingPort()` and then submit a manual request.
+When `port` is `null`, `pair()` discovers the pairing service first. Alternatively, a UI can collect `discoverPairingEndpoints()` to present discovered pairing ports before the user enters the code.
 
 ## QR pairing
 
@@ -73,23 +80,18 @@ val request = AdbPairingRequest.Qr(
 pairingManager.pair(request).collect(::handlePairingEvent)
 ```
 
-The returned `AdbPairingResult` contains the TLS connection endpoint to use for subsequent ADB communication. Connecting to that endpoint is deliberately outside this API.
+The returned `AdbPairingEvent.Success` contains the `AdbConnectionEndpoint` to use for subsequent ADB communication.
 
-## Configuration and failures
+## Cryptographic identity
 
-Use `AdbPairingConfig` to customize the host, discovery and handshake timeouts, or persisted key alias:
+Consumers can obtain the local cryptographic credentials via `AdbIdentity`:
 
 ```kotlin
-val config = AdbPairingConfig(
-    host = "127.0.0.1",
-    discoveryTimeoutMs = 45_000,
-    pairingTimeoutMs = 30_000,
-    keyAlias = "my-app-adb-key"
-)
+val identity = pairingManager.getIdentity()
+val publicKey = identity.encodedPublicKey()
+val sslContext = identity.createSslContext()
 ```
 
-Failures are exposed as `AdbPairingFailure`, including unsupported Android versions, invalid codes, discovery errors, connection errors, key-store errors, timeouts, and unexpected failures. Consumers should handle the typed failure instead of parsing exception messages.
+## Secret masking
 
-## Testing consumers
-
-Depend on `AdbPairingManager` in application code and provide a fake implementation in tests. This keeps Android NSD, cryptography, sockets, and native pairing code out of UI and domain tests.
+`AdbPairingRequest` and `QrPairingSession` automatically mask sensitive pairing codes and passwords in their `toString()` outputs (`******`), ensuring credentials are never accidentally leaked into logs.

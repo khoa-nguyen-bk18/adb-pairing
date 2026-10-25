@@ -62,11 +62,11 @@ The consuming application must declare:
 ## Create the manager
 
 ```kotlin
-import com.devindie.zola.adb.pairing.api.AdbPairingManager
-import com.devindie.zola.adb.pairing.impl.AdbPairingFactory
+import io.github.khoanguyenbk18.adbpairing.api.AdbPairingManager
+import io.github.khoanguyenbk18.adbpairing.impl.AdbPairing
 
 val pairingManager: AdbPairingManager =
-    AdbPairingFactory.create(applicationContext)
+    AdbPairing.create(applicationContext)
 ```
 
 See [api/README.md](api/README.md) and [impl/README.md](impl/README.md) for manual and QR pairing examples.

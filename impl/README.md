@@ -1,13 +1,13 @@
 # ADB Pairing Implementation
 
-`adb-pairing:impl` is the Android implementation of the contracts in `adb-pairing:api`. It hides Android NSD discovery, ADB key creation and persistence, TLS/SPAKE2 pairing, sockets, and the native `libadb.so` binaries.
+`adb-pairing:impl` is the Android implementation of the contracts in `adb-pairing:api`. It encapsulates Android NSD discovery, ADB key generation and persistence, TLS/SPAKE2 pairing, sockets, and the native `libadb.so` binaries.
 
-Applications should expose `AdbPairingManager` to their features and keep direct use of this module in the application composition root.
+All implementation classes are marked `internal`. Applications interact only with the `AdbPairing` composition entry point and `AdbPairingManager`.
 
 ## Requirements
 
-- Android library with `minSdk 28`.
-- Wireless ADB pairing requires Android 11 / API 30 or newer. Older versions receive `AdbPairingFailure.UnsupportedPlatformVersion`.
+- Android library with `minSdk 30`.
+- Wireless ADB pairing requires Android 11 / API 30 or newer.
 - The consuming application must declare `android.permission.INTERNET` in its manifest.
 - Native binaries are packaged for `arm64-v8a`, `armeabi-v7a`, `x86`, and `x86_64`.
 - The implementation depends on `adb-pairing:api` and exposes its public types transitively.
@@ -34,52 +34,25 @@ dependencies {
 
 ## Create the manager
 
-Use the factory at the application boundary:
+Use the `AdbPairing` entry point at the application boundary:
 
 ```kotlin
-val pairingManager: AdbPairingManager =
-    AdbPairingFactory.create(applicationContext)
-```
+import io.github.khoanguyenbk18.adbpairing.impl.AdbPairing
+import io.github.khoanguyenbk18.adbpairing.impl.AdbPairingOptions
 
-The default factory stores ADB key material in the implementation's private `adb_pairing` preferences file.
-
-If another ADB component must use the same identity after pairing, inject a shared `SharedPreferences` instance:
-
-```kotlin
-val preferences = applicationContext.getSharedPreferences(
-    "shared_adb_credentials",
-    Context.MODE_PRIVATE
-)
-
-val pairingManager = AdbPairingFactory.create(
+val pairingManager = AdbPairing.create(
     context = applicationContext,
-    preferences = preferences
+    options = AdbPairingOptions(
+        identityAlias = "my-app-adb",
+        discoveryTimeoutMs = 45_000,
+        pairingTimeoutMs = 30_000
+    )
 )
 ```
-
-This is important when the application has a separate ADB connection client: pairing and later authentication must read the same persisted key.
-
-## Dependency injection example
-
-The implementation does not require a DI framework. With Hilt, bind it at the application level and expose only the API interface:
-
-```kotlin
-@Module
-@InstallIn(SingletonComponent::class)
-object AdbPairingModule {
-    @Provides
-    @Singleton
-    fun provideAdbPairingManager(
-        @ApplicationContext context: Context
-    ): AdbPairingManager = AdbPairingFactory.create(context)
-}
-```
-
-Features can then depend on `AdbPairingManager` without importing implementation classes.
 
 ## Pairing
 
-Pairing is driven through the API module:
+Pairing is driven through the API module contracts:
 
 ```kotlin
 val request = AdbPairingRequest.Manual(
@@ -90,7 +63,7 @@ val request = AdbPairingRequest.Manual(
 pairingManager.pair(request).collect { event ->
     when (event) {
         is AdbPairingEvent.Success -> {
-            val endpoint = event.result.connectionEndpoint
+            val endpoint = event.endpoint
             // Hand endpoint to the application's ADB connection client.
         }
         is AdbPairingEvent.Failed -> handleFailure(event.failure)
@@ -99,14 +72,4 @@ pairingManager.pair(request).collect { event ->
 }
 ```
 
-Collect the flow from a lifecycle-aware or explicitly owned coroutine scope. Cancelling that scope cancels in-flight discovery and pairing work.
-
-## Portability notes
-
-To reuse the feature in another project, copy or publish both `api` and `impl`, add their Gradle dependencies, and construct the manager at that project's composition root. UI, services, notifications, and the post-pair ADB connection lifecycle remain application responsibilities.
-
-Run the module tests with:
-
-```shell
-./gradlew :api:test :impl:testDebugUnitTest
-```
+Collect the flow from a coroutine scope. Cancelling that scope cleanly closes active sockets, unregisters discovery listeners, and produces no failure events.
