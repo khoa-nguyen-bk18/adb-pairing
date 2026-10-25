@@ -1,14 +1,10 @@
-package com.devindie.zola.adb.pairing.api
+package io.github.khoanguyenbk18.adbpairing.api
 
 import java.security.SecureRandom
 import java.util.UUID
 
 /**
- * Encapsulates the credentials and standard AOSP QR content for an ADB wireless pairing session.
- *
- * @property sessionId Unique identifier for tracking this session.
- * @property serviceName The mDNS service name (e.g. "studio-" followed by 10 alphanumeric characters).
- * @property password The random password used during SPAKE2 pairing handshake (20 alphanumeric characters).
+ * Encapsulates credentials and standard AOSP QR content for an ADB wireless pairing session.
  */
 data class QrPairingSession(
     val sessionId: String,
@@ -20,6 +16,9 @@ data class QrPairingSession(
      * `WIFI:T:ADB;S:<serviceName>;P:<password>;;`
      */
     fun qrContent(): String = "WIFI:T:ADB;S:$serviceName;P:$password;;"
+
+    override fun toString(): String =
+        "QrPairingSession(sessionId=$sessionId, serviceName=$serviceName, password=******)"
 
     companion object {
         private val CHARS = ('A'..'Z') + ('a'..'z') + ('0'..'9')

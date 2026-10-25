@@ -1,4 +1,4 @@
-package com.devindie.zola.adb.pairing.api
+package io.github.khoanguyenbk18.adbpairing.api
 
 /**
  * Events emitted by [AdbPairingManager.pair] during the lifecycle of a pairing request.
@@ -11,13 +11,9 @@ sealed interface AdbPairingEvent {
 
     /**
      * The ADB pairing service was discovered.
-     *
-     * @property host Host address of the pairing service.
-     * @property port Port of the pairing service.
-     * @property serviceName The discovered service name, if known.
      */
     data class PairingServiceFound(
-        val host: String,
+        val host: String = "127.0.0.1",
         val port: Int,
         val serviceName: String? = null
     ) : AdbPairingEvent
@@ -35,7 +31,7 @@ sealed interface AdbPairingEvent {
     /**
      * Pairing completed successfully and connection endpoint is discovered. Terminal event.
      */
-    data class Success(val result: AdbPairingResult) : AdbPairingEvent
+    data class Success(val endpoint: AdbConnectionEndpoint) : AdbPairingEvent
 
     /**
      * Pairing failed. Terminal event.

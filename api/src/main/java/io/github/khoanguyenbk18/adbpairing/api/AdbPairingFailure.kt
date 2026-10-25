@@ -1,4 +1,4 @@
-package com.devindie.zola.adb.pairing.api
+package io.github.khoanguyenbk18.adbpairing.api
 
 /**
  * Typed failure hierarchy for ADB pairing errors.
@@ -7,9 +7,6 @@ sealed interface AdbPairingFailure {
     /**
      * Typed failure when running on Android versions below Android 11 (API 30),
      * where wireless pairing via TLS is unsupported.
-     *
-     * @property currentApi The current platform API level.
-     * @property minRequiredApi The minimum required platform API level (30).
      */
     data class UnsupportedPlatformVersion(
         val currentApi: Int,
