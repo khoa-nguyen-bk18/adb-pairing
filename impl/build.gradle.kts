@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.devindie.zola.adb.pairing.impl"
+    namespace = "io.github.khoanguyenbk18.adbpairing.impl"
     compileSdk = 36
 
     defaultConfig {
-        minSdk = 28
+        minSdk = 30
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles("consumer-rules.pro")
     }
@@ -36,7 +36,6 @@ android {
 dependencies {
     api(project(":api"))
     implementation(libs.androidx.core.ktx)
-    implementation(libs.androidx.lifecycle.livedata.core)
     implementation(libs.conscrypt.android)
     implementation(libs.bcpkix.jdk18on)
     testImplementation(libs.junit)
