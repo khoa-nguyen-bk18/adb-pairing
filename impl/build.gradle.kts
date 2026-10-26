@@ -1,6 +1,5 @@
 plugins {
     alias(libs.plugins.android.library)
-    alias(libs.plugins.kotlin.android)
     `maven-publish`
 }
 
@@ -18,9 +17,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
-    kotlinOptions {
-        jvmTarget = "11"
-    }
 
     testOptions {
         unitTests.isReturnDefaultValues = true
@@ -33,8 +29,14 @@ android {
     }
 }
 
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
+    }
+}
+
 dependencies {
-    api(project(":api"))
+    api(project(":adb-pairing:api"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.conscrypt.android)
     implementation(libs.bcpkix.jdk18on)
