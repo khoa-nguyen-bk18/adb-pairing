@@ -1,5 +1,7 @@
 package io.github.khoanguyenbk18.adbpairing.api
 
+import java.security.PrivateKey
+import java.security.cert.Certificate
 import javax.net.ssl.SSLContext
 
 /**
@@ -7,6 +9,8 @@ import javax.net.ssl.SSLContext
  */
 interface AdbIdentity {
     val name: String
+    val privateKey: PrivateKey
+    val certificate: Certificate
     fun encodedPublicKey(): ByteArray
     fun sign(token: ByteArray): ByteArray
     fun createSslContext(): SSLContext

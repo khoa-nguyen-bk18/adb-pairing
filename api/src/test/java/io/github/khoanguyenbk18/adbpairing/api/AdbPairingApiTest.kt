@@ -69,4 +69,30 @@ class AdbPairingApiTest {
         assertFalse(session.toString().contains(session.password))
         assertTrue(session.qrContent().contains(session.password))
     }
+
+    @Test
+    fun testAdbIdentity_exposesKeyAndCertificate() {
+        val dummyPrivKey = object : java.security.PrivateKey {
+            override fun getAlgorithm(): String = "RSA"
+            override fun getFormat(): String = "PKCS#8"
+            override fun getEncoded(): ByteArray = byteArrayOf(1, 2, 3)
+        }
+        val dummyCert = object : java.security.cert.Certificate("X.509") {
+            override fun getEncoded(): ByteArray = byteArrayOf(4, 5, 6)
+            override fun verify(key: java.security.PublicKey?) {}
+            override fun verify(key: java.security.PublicKey?, sigProvider: String?) {}
+            override fun toString(): String = "DummyCert"
+            override fun getPublicKey(): java.security.PublicKey? = null
+        }
+        val identity = object : AdbIdentity {
+            override val name: String = "test"
+            override val privateKey: java.security.PrivateKey = dummyPrivKey
+            override val certificate: java.security.cert.Certificate = dummyCert
+            override fun encodedPublicKey(): ByteArray = byteArrayOf(7, 8, 9)
+            override fun sign(token: ByteArray): ByteArray = byteArrayOf(10)
+            override fun createSslContext(): javax.net.ssl.SSLContext = javax.net.ssl.SSLContext.getDefault()
+        }
+        assertEquals(dummyPrivKey, identity.privateKey)
+        assertEquals(dummyCert, identity.certificate)
+    }
 }

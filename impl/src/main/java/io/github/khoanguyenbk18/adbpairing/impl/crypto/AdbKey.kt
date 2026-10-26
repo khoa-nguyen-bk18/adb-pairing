@@ -75,9 +75,18 @@ internal class AdbKey : AdbIdentity {
     }
 
     private val encryptionKey: Key?
-    private val privateKey: RSAPrivateKey?
-    private val publicKey: RSAPublicKey?
-    private val certificate: X509Certificate?
+    private val _privateKey: RSAPrivateKey?
+    private val _publicKey: RSAPublicKey?
+    private val _certificate: X509Certificate?
+
+    override val privateKey: RSAPrivateKey
+        get() = checkNotNull(_privateKey) { "Private key not initialized" }
+
+    val publicKey: RSAPublicKey?
+        get() = _publicKey
+
+    override val certificate: X509Certificate
+        get() = checkNotNull(_certificate) { "Certificate not initialized" }
 
     constructor(adbKeyStore: AdbKeyStore, name: String) {
         this.name = name
@@ -86,14 +95,14 @@ internal class AdbKey : AdbIdentity {
             ?: error("Failed to generate encryption key with AndroidKeyManager.")
 
         val priv = getOrCreatePrivateKey()
-        this.privateKey = priv
+        this._privateKey = priv
         val pub = KeyFactory.getInstance("RSA").generatePublic(
             RSAPublicKeySpec(
                 priv.modulus,
                 RSAKeyGenParameterSpec.F4
             )
         ) as RSAPublicKey
-        this.publicKey = pub
+        this._publicKey = pub
 
         val signer = JcaContentSignerBuilder("SHA256withRSA").build(priv)
         val x509Certificate = X509v3CertificateBuilder(
@@ -105,7 +114,7 @@ internal class AdbKey : AdbIdentity {
             X500Name("CN=00"),
             SubjectPublicKeyInfo.getInstance(pub.encoded)
         ).build(signer)
-        this.certificate = CertificateFactory.getInstance("X.509")
+        this._certificate = CertificateFactory.getInstance("X.509")
             .generateCertificate(ByteArrayInputStream(x509Certificate.encoded)) as X509Certificate
     }
 
@@ -113,10 +122,13 @@ internal class AdbKey : AdbIdentity {
         this.name = testName
         this.adbKeyStore = null
         this.encryptionKey = null
-        this.privateKey = null
-        this.publicKey = null
-        this.certificate = null
+        this.delimitedTest = true
+        this._privateKey = null
+        this._publicKey = null
+        this._certificate = null
     }
+
+    private var delimitedTest = false
 
     val adbPublicKey: ByteArray by lazy {
         publicKey?.adbEncoded(name) ?: ByteArray(0)
@@ -204,7 +216,7 @@ internal class AdbKey : AdbIdentity {
     }
 
     fun signData(data: ByteArray?): ByteArray {
-        val priv = privateKey ?: error("Private key not initialized")
+        val priv = _privateKey ?: error("Private key not initialized")
         val cipher = Cipher.getInstance("RSA/ECB/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, priv)
         cipher.update(PADDING)
@@ -227,12 +239,12 @@ internal class AdbKey : AdbIdentity {
             }
 
             override fun getCertificateChain(alias: String?): Array<X509Certificate>? {
-                val cert = certificate ?: return null
+                val cert = _certificate ?: return null
                 return if (alias == this.alias) arrayOf(cert) else null
             }
 
             override fun getPrivateKey(alias: String?): PrivateKey? {
-                return if (alias == this.alias) privateKey else null
+                return if (alias == this.alias) _privateKey else null
             }
 
             override fun getClientAliases(
