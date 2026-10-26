@@ -41,14 +41,17 @@ internal class AdbPairingManagerImpl internal constructor(
 
     constructor(context: Context, options: AdbPairingOptions) : this(
         keyProvider = DefaultAdbKeyProvider(
-            PreferenceAdbKeyStore(context.getSharedPreferences("adb_pairing", Context.MODE_PRIVATE))
+            PreferenceAdbKeyStore(context.getSharedPreferences("adb_pairing", Context.MODE_PRIVATE)),
+            legacyKeyBytesProvider = options.legacyKeyBytesProvider
         ),
         nsdDiscovery = AndroidAdbNsdDiscovery(context, options.logger),
         pairingEngine = DefaultAdbPairingEngine(options.logger),
         options = options
     )
 
-    override suspend fun getIdentity(): AdbIdentity =
+    override suspend fun getIdentity(): AdbIdentity = getIdentitySync()
+
+    override fun getIdentitySync(): AdbIdentity =
         keyProvider.getOrCreateKey(options.identityAlias)
 
     override fun pair(request: AdbPairingRequest): Flow<AdbPairingEvent> = flow {

@@ -11,11 +11,13 @@ import io.github.khoanguyenbk18.adbpairing.api.NoOpAdbLogger
  * @property discoveryTimeoutMs Timeout for mDNS service discovery in milliseconds (default: 60s).
  * @property pairingTimeoutMs Timeout for TLS handshake and pairing exchange in milliseconds (default: 30s).
  * @property connectDiscoveryTimeoutMs Timeout for discovering TLS connect service after pairing (default: 30s).
+ * @property legacyKeyBytesProvider Optional provider supplying legacy PKCS#8 RSA private key bytes to migrate.
  */
 data class AdbPairingOptions(
     val identityAlias: String = "adbkey",
     val logger: AdbLogger = NoOpAdbLogger,
     val discoveryTimeoutMs: Long = 60_000L,
     val pairingTimeoutMs: Long = 30_000L,
-    val connectDiscoveryTimeoutMs: Long = 30_000L
+    val connectDiscoveryTimeoutMs: Long = 30_000L,
+    val legacyKeyBytesProvider: ((String) -> ByteArray?)? = null
 )

@@ -88,13 +88,17 @@ internal class AdbKey : AdbIdentity {
     override val certificate: X509Certificate
         get() = checkNotNull(_certificate) { "Certificate not initialized" }
 
-    constructor(adbKeyStore: AdbKeyStore, name: String) {
+    constructor(
+        adbKeyStore: AdbKeyStore,
+        name: String,
+        legacyKeyBytesProvider: ((String) -> ByteArray?)? = null
+    ) {
         this.name = name
         this.adbKeyStore = adbKeyStore
         this.encryptionKey = getOrCreateEncryptionKey()
             ?: error("Failed to generate encryption key with AndroidKeyManager.")
 
-        val priv = getOrCreatePrivateKey()
+        val priv = getOrCreatePrivateKey(legacyKeyBytesProvider)
         this._privateKey = priv
         val pub = KeyFactory.getInstance("RSA").generatePublic(
             RSAPublicKeySpec(
@@ -184,7 +188,9 @@ internal class AdbKey : AdbIdentity {
         return cipher.doFinal(ciphertext, IV_SIZE_IN_BYTES, ciphertext.size - IV_SIZE_IN_BYTES)
     }
 
-    private fun getOrCreatePrivateKey(): RSAPrivateKey {
+    private fun getOrCreatePrivateKey(
+        legacyKeyBytesProvider: ((String) -> ByteArray?)? = null
+    ): RSAPrivateKey {
         var privateKey: RSAPrivateKey? = null
 
         val aad = ByteArray(16)
@@ -201,12 +207,25 @@ internal class AdbKey : AdbIdentity {
             } catch (_: Exception) {
             }
         }
+        if (privateKey == null && legacyKeyBytesProvider != null) {
+            val legacyBytes = runCatching { legacyKeyBytesProvider(name) }.getOrNull()
+            if (legacyBytes != null) {
+                try {
+                    val keyFactory = KeyFactory.getInstance("RSA")
+                    privateKey =
+                        keyFactory.generatePrivate(PKCS8EncodedKeySpec(legacyBytes)) as RSAPrivateKey
+                } catch (_: Exception) {
+                }
+            }
+        }
         if (privateKey == null) {
             val keyPairGenerator = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_RSA)
             keyPairGenerator.initialize(RSAKeyGenParameterSpec(2048, RSAKeyGenParameterSpec.F4))
             val keyPair = keyPairGenerator.generateKeyPair()
             privateKey = keyPair.private as RSAPrivateKey
+        }
 
+        if (ciphertext == null) {
             ciphertext = encrypt(privateKey.encoded, aad)
             if (ciphertext != null) {
                 adbKeyStore?.save(name, ciphertext)

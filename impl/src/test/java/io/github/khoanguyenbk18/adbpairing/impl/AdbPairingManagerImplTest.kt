@@ -313,4 +313,17 @@ class AdbPairingManagerImplTest {
         assertEquals(1, endpoints.size)
         assertEquals(38765, endpoints[0].port)
     }
+
+    @Test
+    fun testGetIdentitySync() {
+        val manager = AdbPairingManagerImpl(
+            keyProvider = FakeAdbKeyProvider(),
+            nsdDiscovery = FakeNsdDiscovery(),
+            pairingEngine = FakePairingEngine(),
+            options = AdbPairingOptions(identityAlias = "test-sync-alias")
+        )
+
+        val identity = manager.getIdentitySync()
+        assertEquals("test-sync-alias", identity.name)
+    }
 }

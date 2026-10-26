@@ -15,6 +15,11 @@ interface AdbPairingManager {
     suspend fun getIdentity(): AdbIdentity
 
     /**
+     * Synchronously retrieves or generates the local ADB cryptographic identity.
+     */
+    fun getIdentitySync(): AdbIdentity
+
+    /**
      * Executes the pairing flow according to the given [request].
      *
      * Collection initiates discovery and handshake; cancelling the collection aborts
