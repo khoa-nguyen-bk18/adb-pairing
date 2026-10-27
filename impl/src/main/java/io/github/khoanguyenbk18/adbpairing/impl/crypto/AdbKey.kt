@@ -72,6 +72,12 @@ internal class AdbKey : AdbIdentity {
             0x30, 0x21, 0x30, 0x09, 0x06, 0x05, 0x2b, 0x0e, 0x03, 0x02, 0x1a, 0x05, 0x00,
             0x04, 0x14
         )
+
+        private val fallbackSoftwareKey: Key by lazy {
+            val kg = KeyGenerator.getInstance("AES")
+            kg.init(256)
+            kg.generateKey()
+        }
     }
 
     private val encryptionKey: Key?
@@ -145,22 +151,26 @@ internal class AdbKey : AdbIdentity {
     override fun createSslContext(): SSLContext = sslContext
 
     private fun getOrCreateEncryptionKey(): Key? {
-        val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE)
-        keyStore.load(null)
+        return try {
+            val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE)
+            keyStore.load(null)
 
-        return keyStore.getKey(ENCRYPTION_KEY_ALIAS, null) ?: run {
-            val parameterSpec = KeyGenParameterSpec.Builder(
-                ENCRYPTION_KEY_ALIAS,
-                KeyProperties.PURPOSE_DECRYPT or KeyProperties.PURPOSE_ENCRYPT
-            )
-                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-                .setKeySize(256)
-                .build()
-            val keyGenerator =
-                KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE)
-            keyGenerator.init(parameterSpec)
-            keyGenerator.generateKey()
+            keyStore.getKey(ENCRYPTION_KEY_ALIAS, null) ?: run {
+                val parameterSpec = KeyGenParameterSpec.Builder(
+                    ENCRYPTION_KEY_ALIAS,
+                    KeyProperties.PURPOSE_DECRYPT or KeyProperties.PURPOSE_ENCRYPT
+                )
+                    .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                    .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                    .setKeySize(256)
+                    .build()
+                val keyGenerator =
+                    KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE)
+                keyGenerator.init(parameterSpec)
+                keyGenerator.generateKey()
+            }
+        } catch (_: Exception) {
+            fallbackSoftwareKey
         }
     }
 
