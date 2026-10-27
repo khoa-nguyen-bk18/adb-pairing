@@ -152,10 +152,11 @@ internal class AdbPairingClient(
 
         val sslContext = key.sslContext
 
+        val targetPort = this.port
         val socket = Socket().apply {
             tcpNoDelay = true
             soTimeout = readTimeoutMs
-            connect(InetSocketAddress(host, port), connectTimeoutMs)
+            connect(InetSocketAddress(host, targetPort), connectTimeoutMs)
         }
         rawSocket = socket
 
