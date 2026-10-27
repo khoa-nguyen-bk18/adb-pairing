@@ -39,7 +39,8 @@ dependencies {
     api(project(":adb-pairing:api"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.conscrypt.android)
-    implementation(libs.bcpkix.jdk18on)
+    implementation(libs.bcpkix.jdk15to18)
+    implementation(libs.bcprov.jdk15to18)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
 }
