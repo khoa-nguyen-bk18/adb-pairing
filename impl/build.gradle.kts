@@ -22,6 +22,12 @@ android {
         unitTests.isReturnDefaultValues = true
     }
 
+    packaging {
+        jniLibs {
+            keepDebugSymbols += "**/*.so"
+        }
+    }
+
     publishing {
         singleVariant("release") {
             withSourcesJar()
