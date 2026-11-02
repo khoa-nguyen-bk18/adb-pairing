@@ -1,5 +1,9 @@
 package io.github.khoanguyenbk18.adbpairing.api
 
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -94,5 +98,45 @@ class AdbPairingApiTest {
         }
         assertEquals(dummyPrivKey, identity.privateKey)
         assertEquals(dummyCert, identity.certificate)
+    }
+
+    @Test
+    fun testAwaitPairing_successAndProgress() = runTest {
+        val progressEvents = mutableListOf<AdbPairingEvent>()
+        val expectedEndpoint = AdbConnectionEndpoint("127.0.0.1", 41234)
+        val manager = object : AdbPairingManager {
+            override suspend fun getIdentity(): AdbIdentity = error("unused")
+            override fun getIdentitySync(): AdbIdentity = error("unused")
+            override fun pair(request: AdbPairingRequest): Flow<AdbPairingEvent> = flowOf(
+                AdbPairingEvent.SearchingForPairingService,
+                AdbPairingEvent.PairingInProgress,
+                AdbPairingEvent.Success(expectedEndpoint)
+            )
+            override fun discoverPairingEndpoints(options: AdbDiscoveryOptions): Flow<AdbDiscoveryEvent> = emptyFlow()
+            override fun discoverConnectionEndpoints(): Flow<AdbConnectionEndpoint> = emptyFlow()
+        }
+
+        val result = manager.awaitPairing("123456") { progressEvents.add(it) }
+        assertTrue(result.isSuccess)
+        assertEquals(expectedEndpoint, result.getOrNull())
+        assertEquals(2, progressEvents.size)
+    }
+
+    @Test
+    fun testAwaitPairing_failureWrapsAdbPairingException() = runTest {
+        val manager = object : AdbPairingManager {
+            override suspend fun getIdentity(): AdbIdentity = error("unused")
+            override fun getIdentitySync(): AdbIdentity = error("unused")
+            override fun pair(request: AdbPairingRequest): Flow<AdbPairingEvent> = flowOf(
+                AdbPairingEvent.Failed(AdbPairingFailure.InvalidPairingCode)
+            )
+            override fun discoverPairingEndpoints(options: AdbDiscoveryOptions): Flow<AdbDiscoveryEvent> = emptyFlow()
+            override fun discoverConnectionEndpoints(): Flow<AdbConnectionEndpoint> = emptyFlow()
+        }
+
+        val result = manager.awaitPairing(QrPairingSession.generate())
+        assertTrue(result.isFailure)
+        val ex = result.exceptionOrNull() as AdbPairingException
+        assertEquals(AdbPairingFailure.InvalidPairingCode, ex.failure)
     }
 }

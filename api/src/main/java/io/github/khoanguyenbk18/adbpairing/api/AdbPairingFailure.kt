@@ -65,3 +65,12 @@ sealed interface AdbPairingFailure {
         val cause: Throwable? = null
     ) : AdbPairingFailure
 }
+
+/**
+ * Exception wrapper around [AdbPairingFailure] used by `Result`-returning convenience APIs
+ * such as [AdbPairingManager.awaitPairing].
+ */
+class AdbPairingException(
+    val failure: AdbPairingFailure
+) : Exception("ADB pairing failed: $failure")
+
