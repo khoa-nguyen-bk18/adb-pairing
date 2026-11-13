@@ -1,6 +1,8 @@
 # ADB Pairing for Android
 
 [![CI](https://github.com/khoa-nguyen-bk18/adb-pairing/actions/workflows/ci.yml/badge.svg)](https://github.com/khoa-nguyen-bk18/adb-pairing/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/khoa-nguyen-bk18/adb-pairing/actions/workflows/codeql.yml/badge.svg)](https://github.com/khoa-nguyen-bk18/adb-pairing/actions/workflows/codeql.yml)
+[![Secret Scanning](https://img.shields.io/badge/Secret%20Scanning-Protected-green?logo=github)](https://github.com/khoa-nguyen-bk18/adb-pairing/security)
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=khoa-nguyen-bk18_adb-pairing&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=khoa-nguyen-bk18_adb-pairing)
 [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=khoa-nguyen-bk18_adb-pairing&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=khoa-nguyen-bk18_adb-pairing)
 [![Vulnerabilities](https://sonarcloud.io/api/project_badges/measure?project=khoa-nguyen-bk18_adb-pairing&metric=vulnerabilities)](https://sonarcloud.io/summary/new_code?id=khoa-nguyen-bk18_adb-pairing)
