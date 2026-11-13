@@ -1,6 +1,11 @@
 # ADB Pairing for Android
 
 [![CI](https://github.com/khoa-nguyen-bk18/adb-pairing/actions/workflows/ci.yml/badge.svg)](https://github.com/khoa-nguyen-bk18/adb-pairing/actions/workflows/ci.yml)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=khoa-nguyen-bk18_adb-pairing&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=khoa-nguyen-bk18_adb-pairing)
+[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=khoa-nguyen-bk18_adb-pairing&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=khoa-nguyen-bk18_adb-pairing)
+[![Vulnerabilities](https://sonarcloud.io/api/project_badges/measure?project=khoa-nguyen-bk18_adb-pairing&metric=vulnerabilities)](https://sonarcloud.io/summary/new_code?id=khoa-nguyen-bk18_adb-pairing)
+[![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=khoa-nguyen-bk18_adb-pairing&metric=sqale_rating)](https://sonarcloud.io/summary/new_code?id=khoa-nguyen-bk18_adb-pairing)
+[![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=khoa-nguyen-bk18_adb-pairing&metric=reliability_rating)](https://sonarcloud.io/summary/new_code?id=khoa-nguyen-bk18_adb-pairing)
 [![API 30+](https://img.shields.io/badge/API-30%2B-brightgreen.svg?style=flat)](https://developer.android.com/about/versions/11)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-blue.svg?logo=kotlin)](https://kotlinlang.org)
 

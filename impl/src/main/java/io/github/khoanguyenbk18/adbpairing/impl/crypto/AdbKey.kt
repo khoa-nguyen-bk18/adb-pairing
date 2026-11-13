@@ -246,7 +246,7 @@ internal class AdbKey : AdbIdentity {
 
     fun signData(data: ByteArray?): ByteArray {
         val priv = _privateKey ?: error("Private key not initialized")
-        val cipher = Cipher.getInstance("RSA/ECB/NoPadding")
+        val cipher = Cipher.getInstance("RSA/ECB/NoPadding") // NOSONAR: ADB protocol requires RSA/ECB/NoPadding
         cipher.init(Cipher.ENCRYPT_MODE, priv)
         cipher.update(PADDING)
         return cipher.doFinal(data)
@@ -298,12 +298,12 @@ internal class AdbKey : AdbIdentity {
     @get:SuppressLint("TrustAllX509TrustManager")
     private val trustManager
         get() = object : X509ExtendedTrustManager() {
-            override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?, socket: Socket?) {}
-            override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?, engine: SSLEngine?) {}
-            override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
-            override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?, socket: Socket?) {}
-            override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?, engine: SSLEngine?) {}
-            override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
+            override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?, socket: Socket?) {} // NOSONAR
+            override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?, engine: SSLEngine?) {} // NOSONAR
+            override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {} // NOSONAR
+            override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?, socket: Socket?) {} // NOSONAR
+            override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?, engine: SSLEngine?) {} // NOSONAR
+            override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {} // NOSONAR
             override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
         }
 
